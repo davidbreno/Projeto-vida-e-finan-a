@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-const API_URL = 'http://localhost:4000/api/auth';
+// Troque para variável de ambiente ou endereço público
+const API_URL = process.env.REACT_APP_API_URL || 'https://seu-backend.vercel.app/api/auth';
 
 export default function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = useState('');
