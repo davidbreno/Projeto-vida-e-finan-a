@@ -1,24 +1,15 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/user.js';
-import { pool } from './db.js';
-
-dotenv.config();
+import express from "express";
+import cors from "cors";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('API rodando!');
-});
+// Libera seu domínio da Vercel pra acessar a API
+app.use(
+  cors({
+    origin: "https://projeto-vida-e-finan-a-2fkf-ig8pymaql-david-brenos-projects.vercel.app",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+  })
+);
+app.options("*", cors());
 
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
