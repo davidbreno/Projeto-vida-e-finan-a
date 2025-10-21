@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 // Troque para variável de ambiente ou endereço público
-const API_URL = process.env.URL_API_DO_APP_REACT || 'https://projeto-vida-e-finan-a.onrender.com/api/auth';
+const API_URL = process.env.REACT_APP_API_URL || 'https://projeto-vida-e-finan-a.onrender.com/api/auth';
 
 export default function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = useState('');
