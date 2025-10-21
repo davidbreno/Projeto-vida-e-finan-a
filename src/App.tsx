@@ -1,5 +1,7 @@
-import { FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { getUserData, saveDashboardState } from "./services/api";
+import { useEffect, useId, useMemo, useState } from "react";
 import logo from "./assets/logo.png";
+import Login from "./Login";
 
 type IconProps = { className?: string };
 
@@ -142,11 +144,6 @@ const formatLiters = (ml: number) => `${litersFormatter.format(ml / 1000)} L`;
 type CalorieEntry = { id: string; description: string; amount: number; timestamp: string };
 
 const isBrowser = typeof window !== "undefined";
-const WATER_CONSUMED_STORAGE_KEY = "dashboard-water-consumed";
-const CALORIE_ENTRIES_STORAGE_KEY = "dashboard-calorie-entries";
-const THEME_STORAGE_KEY = "dashboard-theme";
-const FONT_STORAGE_KEY = "dashboard-font";
-const FINANCE_RECORDS_STORAGE_KEY = "dashboard-finance-records";
 
 type FinanceRecord = {
   id: string;
@@ -163,10 +160,27 @@ type FinanceRecordInput = {
   description: string;
 };
 
+type DashboardStateRow = {
+  user_id: string;
+  water_consumed: number;
+  calorie_entries: CalorieEntry[];
+  finance_records: FinanceRecordMap;
+  selected_theme: string;
+  selected_font: string;
+};
+
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL"
 });
+
+const defaultDashboardState: Omit<DashboardStateRow, "user_id"> = {
+  water_consumed: 0,
+  calorie_entries: [],
+  finance_records: {},
+  selected_theme: "Neon Deep",
+  selected_font: "Inter"
+};
 
 const buildAreaPath = (values: number[]) => {
   if (values.length === 0) return "";
@@ -177,71 +191,6 @@ const buildAreaPath = (values: number[]) => {
   });
   return `M0,100 L${segments.join(" L ")} L100,100 Z`;
 };
-
-function loadNumberFromStorage(key: string, fallback = 0): number {
-  if (!isBrowser) return fallback;
-  const stored = window.localStorage.getItem(key);
-  if (stored === null) return fallback;
-  const parsed = Number(stored);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function loadCalorieEntries(): CalorieEntry[] {
-  if (!isBrowser) return [];
-  const raw = window.localStorage.getItem(CALORIE_ENTRIES_STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item, index) => {
-      if (typeof item !== "object" || item === null) {
-        return {
-          id: `${Date.now()}-${index}`,
-          description: "",
-          amount: 0,
-          timestamp: ""
-        };
-      }
-      const record = item as Partial<CalorieEntry>;
-      return {
-        id: typeof record.id === "string" ? record.id : `${Date.now()}-${index}`,
-        description: typeof record.description === "string" ? record.description : "",
-        amount: typeof record.amount === "number" ? record.amount : Number(record.amount) || 0,
-        timestamp: typeof record.timestamp === "string" ? record.timestamp : ""
-      };
-    });
-  } catch {
-    return [];
-  }
-}
-
-function loadFinanceRecords(): FinanceRecordMap {
-  if (!isBrowser) return {};
-  const raw = window.localStorage.getItem(FINANCE_RECORDS_STORAGE_KEY);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return {};
-    const recordMap = parsed as Record<string, unknown>;
-    return Object.entries(recordMap).reduce<FinanceRecordMap>((acc, [sectionId, value]) => {
-      if (!Array.isArray(value)) return acc;
-      acc[sectionId] = value
-        .map((item, index) => {
-          if (typeof item !== "object" || item === null) return null;
-          const record = item as Partial<FinanceRecord>;
-          const id = typeof record.id === "string" ? record.id : `${Date.now()}-${sectionId}-${index}`;
-          const amount = typeof record.amount === "number" ? record.amount : Number(record.amount) || 0;
-          const date = typeof record.date === "string" ? record.date : "";
-          const description = typeof record.description === "string" ? record.description : "";
-          return { id, amount, date, description };
-        })
-        .filter((item): item is FinanceRecord => item !== null);
-      return acc;
-    }, {});
-  } catch {
-    return {};
-  }
-}
 
 const formatCurrency = (amount: number) => currencyFormatter.format(amount);
 
@@ -260,19 +209,84 @@ const triggerCsvDownload = (filename: string, rows: string[][]) => {
 };
 
 export default function App() {
+  // Carregar dados do usuário ao logar
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const data = await getUserData(token);
+        setWaterConsumed(data.water_consumed ?? defaultDashboardState.water_consumed);
+        setCalorieEntries(Array.isArray(data.calorie_entries) ? data.calorie_entries : []);
+        setFinanceRecords(data.finance_records ?? {});
+        setSelectedTheme(data.selected_theme ?? defaultDashboardState.selected_theme);
+        setSelectedFont(data.selected_font ?? defaultDashboardState.selected_font);
+      } catch (err) {
+        // Se erro, pode ser token expirado ou usuário não encontrado
+        setToken(null);
+      }
+    })();
+  }, [token]);
+  // Salvar dados do painel sempre que houver alteração
+  useEffect(() => {
+    if (!token) return;
+    const state = {
+      water_consumed: waterConsumed,
+      calorie_entries: calorieEntries,
+      finance_records: financeRecords,
+      selected_theme: selectedTheme,
+      selected_font: selectedFont
+    };
+    saveDashboardState(token, state).catch(() => {});
+  }, [token, waterConsumed, calorieEntries, financeRecords, selectedTheme, selectedFont]);
+  const [token, setToken] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState(navItems[0].id);
   const [waterGoal] = useState(3000);
-  const [waterConsumed, setWaterConsumed] = useState(() => loadNumberFromStorage(WATER_CONSUMED_STORAGE_KEY, 0));
+  const [waterConsumed, setWaterConsumed] = useState(defaultDashboardState.water_consumed);
   const [calorieGoal] = useState(2200);
-  const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(() => loadCalorieEntries());
+  const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(defaultDashboardState.calorie_entries);
   const [showCalorieModal, setShowCalorieModal] = useState(false);
+  const [financeRecords, setFinanceRecords] = useState<FinanceRecordMap>(defaultDashboardState.finance_records);
+  const [selectedTheme, setSelectedTheme] = useState(defaultDashboardState.selected_theme);
+  const [selectedFont, setSelectedFont] = useState(defaultDashboardState.selected_font);
+
   const calorieConsumed = useMemo(
     () => calorieEntries.reduce((total, entry) => total + entry.amount, 0),
     [calorieEntries]
   );
-  const [financeRecords, setFinanceRecords] = useState<FinanceRecordMap>(() => loadFinanceRecords());
-  const currentItem = navItems.find(item => item.id === activeTab) ?? navItems[0];
+  const remainingCalories = Math.max(calorieGoal - calorieConsumed, 0);
+
+  // userId pode ser extraído do token JWT se necessário
+
+
+  useEffect(() => {
+    applyThemeVariables(selectedTheme);
+    applyFontPreference(selectedFont);
+  }, [selectedTheme, selectedFont]);
+
   const handleNavigate = (id: string) => setActiveTab(id);
+
+  // Funções de autenticação agora são feitas via Login.tsx e backend
+
+  const handleResetFinance = useCallback(() => {
+    setFinanceRecords({});
+  }, []);
+
+  const handleResetLayout = useCallback(() => {
+    setSelectedTheme(defaultDashboardState.selected_theme);
+    setSelectedFont(defaultDashboardState.selected_font);
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    setWaterConsumed(defaultDashboardState.water_consumed);
+    setCalorieEntries(defaultDashboardState.calorie_entries);
+    setFinanceRecords(defaultDashboardState.finance_records);
+    setSelectedTheme(defaultDashboardState.selected_theme);
+    setSelectedFont(defaultDashboardState.selected_font);
+  }, []);
+
+  const currentItem = navItems.find(item => item.id === activeTab) ?? navItems[0];
+
   const handleAddCalories = (description: string, amount: number) => {
     const timestamp = new Intl.DateTimeFormat("pt-BR", {
       hour: "2-digit",
@@ -289,7 +303,6 @@ export default function App() {
   const handleResetCalories = () => {
     setCalorieEntries([]);
   };
-  const remainingCalories = Math.max(calorieGoal - calorieConsumed, 0);
   const handleCreateFinanceRecord = useCallback((sectionId: string, input: FinanceRecordInput) => {
     setFinanceRecords(prev => {
       const sectionRecords = prev[sectionId] ?? [];
@@ -417,38 +430,6 @@ export default function App() {
     triggerCsvDownload(`agua-relatorio-${today}.csv`, rows);
   }, [waterConsumed, waterGoal]);
 
-  useEffect(() => {
-    if (!isBrowser) return;
-    window.localStorage.setItem(WATER_CONSUMED_STORAGE_KEY, String(waterConsumed));
-  }, [waterConsumed]);
-
-  useEffect(() => {
-    if (!isBrowser) return;
-    window.localStorage.setItem(CALORIE_ENTRIES_STORAGE_KEY, JSON.stringify(calorieEntries));
-  }, [calorieEntries]);
-
-  useEffect(() => {
-    if (!isBrowser) return;
-    window.localStorage.setItem(FINANCE_RECORDS_STORAGE_KEY, JSON.stringify(financeRecords));
-  }, [financeRecords]);
-
-  useEffect(() => {
-    if (!isBrowser) return;
-    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (storedTheme) {
-      applyThemeVariables(storedTheme);
-    } else {
-      applyThemeVariables(themeOptions[0].name);
-    }
-
-    const storedFont = window.localStorage.getItem(FONT_STORAGE_KEY);
-    if (storedFont) {
-      applyFontPreference(storedFont);
-    } else {
-      applyFontPreference(fontOptions[0]);
-    }
-  }, []);
-
   const overviewCards = useMemo(
     () => [
       {
@@ -479,6 +460,20 @@ export default function App() {
     ],
     [calorieConsumed, calorieGoal, remainingCalories]
   );
+
+  if (!token) {
+    // Exibe tela de login/cadastro do backend
+    // @ts-ignore
+    return <Login onLogin={setToken} />;
+  }
+
+  if (!isSyncReady) {
+    return (
+      <div className='flex min-h-screen items-center justify-center bg-dashboard-background text-dashboard-text'>
+        <span className='animate-pulse text-sm uppercase tracking-[0.4rem] text-dashboard-muted'>Carregando dados seguros...</span>
+      </div>
+    );
+  }
 
   return (
     <div className='flex min-h-screen bg-dashboard-background text-dashboard-text'>
@@ -1231,30 +1226,25 @@ function applyFontPreference(font: string) {
   document.documentElement.style.setProperty("--dashboard-font", `'${font}', sans-serif`);
 }
 
-const SettingsPanel = () => {
-  const [selectedTheme, setSelectedTheme] = useState(() => {
-    if (!isBrowser) return themeOptions[0].name;
-    return window.localStorage.getItem(THEME_STORAGE_KEY) ?? themeOptions[0].name;
-  });
-  const [selectedFont, setSelectedFont] = useState(() => {
-    if (!isBrowser) return fontOptions[0];
-    return window.localStorage.getItem(FONT_STORAGE_KEY) ?? fontOptions[0];
-  });
+type SettingsPanelProps = {
+  selectedTheme: string;
+  onThemeChange: (theme: string) => void;
+  selectedFont: string;
+  onFontChange: (font: string) => void;
+  onResetFinance: () => void;
+  onResetLayout: () => void;
+  onResetAll: () => void;
+};
 
-  useEffect(() => {
-    applyThemeVariables(selectedTheme);
-    if (isBrowser) {
-      window.localStorage.setItem(THEME_STORAGE_KEY, selectedTheme);
-    }
-  }, [selectedTheme]);
-
-  useEffect(() => {
-    applyFontPreference(selectedFont);
-    if (isBrowser) {
-      window.localStorage.setItem(FONT_STORAGE_KEY, selectedFont);
-    }
-  }, [selectedFont]);
-
+const SettingsPanel = ({
+  selectedTheme,
+  onThemeChange,
+  selectedFont,
+  onFontChange,
+  onResetFinance,
+  onResetLayout,
+  onResetAll
+}: SettingsPanelProps) => {
   return (
     <section className='space-y-10'>
       <header className='flex flex-col gap-2'>
@@ -1275,7 +1265,7 @@ const SettingsPanel = () => {
               return (
                 <button
                   key={option.name}
-                  onClick={() => setSelectedTheme(option.name)}
+                  onClick={() => onThemeChange(option.name)}
                   className={[
                     "flex flex-col gap-3 rounded-2xl border px-4 py-4 text-left transition",
                     isActive
@@ -1285,8 +1275,8 @@ const SettingsPanel = () => {
                 >
                   <span className='text-sm font-semibold uppercase tracking-[0.2rem]'>{option.name}</span>
                   <span className='flex items-center gap-3'>
-                    <span className={`h-8 flex-1 rounded-full theme-primary-${option.name.replace(/\s+/g, '').toLowerCase()}`} />
-                    <span className={`h-8 flex-1 rounded-full theme-secondary-${option.name.replace(/\s+/g, '').toLowerCase()}`} />
+                    <span className={`h-8 flex-1 rounded-full theme-primary-${option.name.replace(/\s+/g, "").toLowerCase()}`} />
+                    <span className={`h-8 flex-1 rounded-full theme-secondary-${option.name.replace(/\s+/g, "").toLowerCase()}`} />
                   </span>
                   <span className='text-xs'>Aplicar automaticamente no próximo login</span>
                 </button>
@@ -1304,7 +1294,7 @@ const SettingsPanel = () => {
               return (
                 <button
                   key={font}
-                  onClick={() => setSelectedFont(font)}
+                  onClick={() => onFontChange(font)}
                   className={[
                     "rounded-full border px-5 py-2 text-sm transition",
                     isActive
@@ -1319,8 +1309,8 @@ const SettingsPanel = () => {
           </div>
           <div className='rounded-2xl border border-dashboard-border/60 bg-dashboard-background/50 px-6 py-5 text-sm text-dashboard-muted'>
             Visualize abaixo como o texto ficaria com a fonte selecionada:
-            <p className={`mt-4 text-lg text-dashboard-text font-${selectedFont.replace(/\s+/g, '').toLowerCase()}`}>
-              “Painel Financeiro Dr. David Breno”
+            <p className={`mt-4 text-lg text-dashboard-text font-${selectedFont.replace(/\s+/g, "").toLowerCase()}`}>
+              "Painel Financeiro Dr. David Breno"
             </p>
           </div>
         </div>
@@ -1330,13 +1320,22 @@ const SettingsPanel = () => {
         <h2 className='text-lg font-semibold text-dashboard-text'>Redefinir painel</h2>
         <p className='text-sm text-dashboard-muted'>Zere dados, widgets ou preferências quando necessário.</p>
         <div className='mt-6 grid gap-4 md:grid-cols-3'>
-          <button className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'>
+          <button
+            onClick={onResetFinance}
+            className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'
+          >
             Resetar movimentações
           </button>
-          <button className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'>
+          <button
+            onClick={onResetLayout}
+            className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'
+          >
             Resetar configurações de layout
           </button>
-          <button className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'>
+          <button
+            onClick={onResetAll}
+            className='rounded-2xl border border-dashboard-border/70 bg-dashboard-background/60 px-5 py-4 text-sm text-dashboard-muted transition hover:border-dashboard-accent hover:text-dashboard-accent'
+          >
             Resetar tudo
           </button>
         </div>
@@ -1354,7 +1353,6 @@ const SettingsPanel = () => {
     </section>
   );
 };
-
 
 
 
