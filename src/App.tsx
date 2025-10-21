@@ -210,7 +210,16 @@ const triggerCsvDownload = (filename: string, rows: string[][]) => {
 
 export default function App() {
   // Declarações de estado devem vir antes dos efeitos
-  // ...existing code...
+  const [token, setToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(navItems[0].id);
+  const [waterGoal] = useState(3000);
+  const [waterConsumed, setWaterConsumed] = useState(defaultDashboardState.water_consumed);
+  const [calorieGoal] = useState(2200);
+  const [calorieEntries, setCalorieEntries] = useState<CalorieEntry[]>(defaultDashboardState.calorie_entries);
+  const [showCalorieModal, setShowCalorieModal] = useState(false);
+  const [financeRecords, setFinanceRecords] = useState<FinanceRecordMap>(defaultDashboardState.finance_records);
+  const [selectedTheme, setSelectedTheme] = useState(defaultDashboardState.selected_theme);
+  const [selectedFont, setSelectedFont] = useState(defaultDashboardState.selected_font);
 
   // Carregar dados do usuário ao logar
   useEffect(() => {
@@ -452,6 +461,11 @@ export default function App() {
     ],
     [calorieConsumed, calorieGoal, remainingCalories]
   );
+
+  // Adicione um fallback para token indefinido
+  if (typeof token === 'undefined') {
+    return <div style={{ color: 'red', padding: 32 }}>Erro: variável token não definida. Verifique as declarações de estado.</div>;
+  }
 
   if (!token) {
     // Exibe tela de login/cadastro do backend
