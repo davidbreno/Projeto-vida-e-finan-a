@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "path": "."  // ou "./caminho/para/seu/projeto"
+    }
+  ],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#3c3e40",
+      "titleBar.activeForeground": "#ffffff",
+      "activityBar.background": "#ea4de5a6"
+    },
+    "workbench.productIconTheme": "fluent-icons", // opcional: muda o visual dos ícones
+    "workbench.iconTheme": "vscode-icons",        // opcional: requer extensão instalada
+    "editor.fontFamily": "'Fira Code', monospace" // exemplo de personalização extra
+  }
+}

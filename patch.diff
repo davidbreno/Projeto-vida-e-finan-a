@@ -1,0 +1,64 @@
+*** Begin Patch
+*** Update File: src/App.tsx
+@@
+-  const overviewCards = useMemo(
+-    () => [
+-      {
+-        id: "peso",
+-        title: "Peso atual",
+-        value: "82,4 kg",
+-        helper: "IMC 24,1  \a Atualizado \u00E0s 08:30",
+-        primaryAction: "Ver peso",
+-        icon: WeightIcon
+-      },
+-      {
+-        id: "ciclo",
+-        title: "Ciclo em andamento",
+-        value: "Dia 14 de 28",
+-        helper: "Pr\u00F3xima fase prevista para 12/11",
+-        primaryAction: "Ver ciclo",
+-        icon: CycleIcon
+-      },
+-      {
+-        id: "calorias",
+-        title: "Calorias di\u00E1rias",
+-        value: `${calorieConsumed.toLocaleString("pt-BR")} / ${calorieGoal.toLocaleString("pt-BR")} kcal`,
+-        helper: `${remainingCalories.toLocaleString("pt-BR")} kcal restantes para atingir a meta` ,
+-        primaryAction: "Ver calorias",
+-        secondaryAction: "Registrar consumo",
+-        icon: FireIcon
+-      }
+-    ],
+-    [calorieConsumed, calorieGoal, remainingCalories]
+-  );
++  const overviewCards = useMemo(
++    () => [
++      {
++        id: "peso",
++        title: "Peso atual",
++        value: "82,4 kg",
++        helper: "IMC 24,1 - Atualizado às 08:30",
++        primaryAction: "Ver peso",
++        icon: WeightIcon
++      },
++      {
++        id: "ciclo",
++        title: "Ciclo em andamento",
++        value: "Dia 14 de 28",
++        helper: "Próxima fase prevista para 12/11",
++        primaryAction: "Ver ciclo",
++        icon: CycleIcon
++      },
++      {
++        id: "calorias",
++        title: "Calorias diárias",
++        value: `${calorieConsumed.toLocaleString("pt-BR")} / ${calorieGoal.toLocaleString("pt-BR")} kcal`,
++        helper: `${remainingCalories.toLocaleString("pt-BR")} kcal restantes para atingir a meta`,
++        primaryAction: "Ver calorias",
++        secondaryAction: "Registrar consumo",
++        icon: FireIcon
++      }
++    ],
++    [calorieConsumed, calorieGoal, remainingCalories]
++  );
+*** End Patch
